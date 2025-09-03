@@ -1,0 +1,18 @@
+[project]
+name = "geo-service-app"
+version = "0.1.0"
+description = "Service for reviewing infrastructure such as power lines and land use (forests, buildings, existing wind/solar power plants, etc.)."
+readme = "README.md"
+requires-python = ">=3.13"
+
+dependencies = [
+"fastapi>=0.116.1",
+"pydantic>=2.11.7",
+"requests>=2.32.4",
+"uvicorn>=0.35.0",
+"httpx>=0.24.0",
+"pytest>=7.4.0",
+"pytest-asyncio>=0.22.0",
+"OSMPythonTools>=0.3.3",
+"plpygis"
+]
