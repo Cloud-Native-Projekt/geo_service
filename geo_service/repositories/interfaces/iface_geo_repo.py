@@ -6,7 +6,7 @@ import geo_service.schemas.geo_schemas as schemas
 class GeoRepoInterface(ABC):
 
     @abstractmethod
-    async def get_power_infrastructure(
+    async def get_power(
         self, lat: float, lng: float
     ) -> schemas.ResultPower:
         pass

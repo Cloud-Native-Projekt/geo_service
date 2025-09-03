@@ -15,7 +15,7 @@ class GeoService:
 
     async def get_power(self, req: GeoCond) -> ResultPower:
         """Fetch GeoCond data and return as GeoCondResult."""
-        power: ResultPower = await self.geo_repo.get_power_infrastructure(
+        power: ResultPower = await self.geo_repo.get_power(
             lat=req.lat, lng=req.lng
         )
         if not power:
