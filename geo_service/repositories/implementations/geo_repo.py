@@ -72,7 +72,7 @@ class GeoRepo(GeoRepoInterface):
             area=poi,
             elementType=["way", "relation"],
             selector='"boundary"="protected_area"',
-            includeGeometry=True,
+            includeGeometry=False,
         )
         result = self.overpass.query(query)
         if len(result.elements()) > 0:
@@ -111,15 +111,19 @@ class GeoRepo(GeoRepoInterface):
         )
 
     async def get_forest(self, lat: float, lng: float) -> ResultForest:
-        poi = self.nominatim.query(lat, lng, reverse=True).areaId()
+        poi = self.nominatim.query(lat, lng, reverse=True, zoom=12).areaId()
         query = overpassQueryBuilder(
             area=poi,
-            elementType=["way", "relation"],
-            selector='"boundary"="protected_area"',
+            elementType=["way", "relation", "node"],
+            selector=[
+                '"natural"="wood"',
+                '"landuse"="forest"',
+                '"landcover"="trees"'
+                ],
             includeGeometry=False,
         )
         result = self.overpass.query(query)
-        if result.countElements() > 0:
+        if len(result.elements()) > 0:
             forest = result.elements()[0]
             return ResultForest(
                 in_forest=True,
