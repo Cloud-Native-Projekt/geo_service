@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from typing import Optional
 
 
 class GeoCond(BaseModel):
@@ -13,14 +14,13 @@ class ResultPower(BaseModel):
 
 class ResultProtection(BaseModel):
     in_protected_area: bool
-    designation: str = None
+    designation: Optional[str]
 
 
 class ResultForest(BaseModel):
-    type: str = None
+    type: Optional[str]
     in_forest: bool
 
 
 class ResultBuildings(BaseModel):
     in_populated_area: bool = None
-    

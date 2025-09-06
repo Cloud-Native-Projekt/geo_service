@@ -13,5 +13,9 @@ dependencies = [
 "httpx>=0.24.0",
 "pytest>=7.4.0",
 "pytest-asyncio>=0.22.0",
-"OSMPythonTools>=0.3.3"
+"OSMPythonTools>=0.3.3",
+"plpygis",
+"shapely",
+"geopandas",
+"pandas"
 ]
