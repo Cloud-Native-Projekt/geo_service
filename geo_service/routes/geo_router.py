@@ -11,9 +11,10 @@ router = APIRouter()
 async def geo_power_endpoint(
     lat: float,
     lng: float,
+    radius: int,
     geo_service: GeoService = Depends(get_geo_service),
 ):
-    geo_cond = GeoCond(lat=lat, lng=lng)
+    geo_cond = GeoCond(lat=lat, lng=lng, radius=radius)
     return await geo_service.get_power(geo_cond)
 
 
@@ -21,9 +22,10 @@ async def geo_power_endpoint(
 async def geo_protection_endpoint(
     lat: float,
     lng: float,
+    radius: int,
     geo_service: GeoService = Depends(get_geo_service),
 ):
-    geo_cond = GeoCond(lat=lat, lng=lng)
+    geo_cond = GeoCond(lat=lat, lng=lng, radius=radius)
     return await geo_service.get_protected_areas(geo_cond)
 
 
@@ -31,9 +33,10 @@ async def geo_protection_endpoint(
 async def geo_forest_endpoint(
     lat: float,
     lng: float,
+    radius: int,
     geo_service: GeoService = Depends(get_geo_service),
 ):
-    geo_cond = GeoCond(lat=lat, lng=lng)
+    geo_cond = GeoCond(lat=lat, lng=lng, radius=radius)
     return await geo_service.get_forest(geo_cond)
 
 
@@ -41,7 +44,8 @@ async def geo_forest_endpoint(
 async def geo_builtup_endpoint(
     lat: float,
     lng: float,
+    radius: int,
     geo_service: GeoService = Depends(get_geo_service),
 ):
-    geo_cond = GeoCond(lat=lat, lng=lng)
+    geo_cond = GeoCond(lat=lat, lng=lng, radius=radius)
     return await geo_service.get_buildings_in_area(geo_cond)

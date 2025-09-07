@@ -5,6 +5,7 @@ from typing import Optional
 class GeoCond(BaseModel):
     lat: float
     lng: float
+    radius: Optional[int] = 10000
 
 
 class ResultPower(BaseModel):

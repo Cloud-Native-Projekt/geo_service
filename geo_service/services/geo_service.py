@@ -16,7 +16,7 @@ class GeoService:
     async def get_power(self, req: GeoCond) -> ResultPower:
         """Fetch GeoCond data and return as GeoCondResult."""
         power: ResultPower = await self.geo_repo.get_power(
-            lat=req.lat, lng=req.lng
+            lat=req.lat, lng=req.lng, radius=req.radius
         )
         if not power:
             raise ValueError("Power infrastructure data not found")
@@ -25,7 +25,7 @@ class GeoService:
     async def get_protected_areas(self, req: GeoCond) -> ResultProtection:
         """Fetch protected areas data."""
         protection: ResultProtection = await self.geo_repo.get_protected_areas(
-            lat=req.lat, lng=req.lng
+            lat=req.lat, lng=req.lng, radius=req.radius
         )
         if not protection:
             raise ValueError("Protected areas data not found")
@@ -34,7 +34,7 @@ class GeoService:
     async def get_forest(self, req: GeoCond) -> ResultForest:
         """Fetch forest overlap data."""
         forest: ResultForest = await self.geo_repo.get_forest(
-            lat=req.lat, lng=req.lng
+            lat=req.lat, lng=req.lng, radius=req.radius
         )
         if not forest:
             raise ValueError("Forest overlap data not found")
@@ -43,7 +43,7 @@ class GeoService:
     async def get_buildings_in_area(self, req: GeoCond) -> ResultBuildings:
         """Fetch built-up/buildings data."""
         buildings: ResultBuildings = await self.geo_repo.get_buildings_in_area(
-            lat=req.lat, lng=req.lng
+            lat=req.lat, lng=req.lng, radius=req.radius
         )
         if not buildings:
             raise ValueError("Buildings in area data not found")

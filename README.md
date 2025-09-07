@@ -17,3 +17,11 @@ For production run `docker compose up -d` to start the containers in detached mo
  run: `uv sync`
  (or if error: `uv sync --allow-insecure-host github.com --allow-insecure-host pypi.org --allow-insecure-host files.pythonhosted.org`)
  
+
+ ## Libaries used for Open Street map:
+ 
+ - OSMPythonTools:
+    - https://github.com/mocnik-science/osm-python-tools
+    - Nominatim: 
+        - docs: https://nominatim.org/release-docs/develop/api/Reverse/
+        - GitRepo and exapmles: https://github.com/mocnik-science/osm-python-tools/blob/df4d0b4afaae78c34920f9a0193bf394f903036e/docs/nominatim.md
