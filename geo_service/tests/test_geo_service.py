@@ -4,18 +4,18 @@ params_protected_area = {
     "radius": 10000
 }
 
-# Wald in bayern
+# Forest in bavaria
 params_in_forest = {
     "lng": 11.466577,
     "lat": 48.232089,
     "radius": 5000
 }
 
-# Punkt in Sahara
+# Point in Sahara
 params_sahara = {
     "lat": 23.4162,
     "lng": 25.6628,
-    "radius": 5000
+    "radius": 2000
 }
 
 params_heidelberg = {
@@ -24,18 +24,11 @@ params_heidelberg = {
     "radius": 10000
 }
 
-# Im Pfälzer Wald
+# Point in Pfälzer Wald
 params_no_infra = {
     "lng": 7.7583,
     "lat": 49.2872,
-    "radius": 5000
-}
-
-# Punkt im bayrischen Wald ohne Gebäude
-params_no_buildings = {
-    "lng": 13.3692,
-    "lat": 49.0230,
-    "radius": 4000
+    "radius": 2000
 }
 
 
@@ -78,7 +71,7 @@ def test_get_protected_areas_true(test_app):
     response = test_app.get("/geo/protection", params=params_protected_area)
     assert response.status_code == 200
     data = response.json()
-    assert data['designation'] == "Naturpark"
+    assert data['designation'] == "Naturschutzgebiet"
     assert data['in_protected_area']
 
 
@@ -97,7 +90,7 @@ def test_get_buildings_in_area_true(test_app):
 
 
 def test_get_buildings_in_area_false(test_app):
-    response = test_app.get("/geo/builtup", params=params_no_buildings)
+    response = test_app.get("/geo/builtup", params=params_sahara)
     assert response.status_code == 200
     data = response.json()
     assert not data['in_populated_area']

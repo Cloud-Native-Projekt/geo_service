@@ -13,13 +13,6 @@ ENV UV_PYTHON_DOWNLOADS=0
 
 WORKDIR /app
 
-# Install build dependencies and libraries
-RUN apt-get update && \
-    apt-get install  -y ca-certificates\
-    build-essential gcc \
-    libpq-dev && \
-    rm -rf /var/lib/apt/lists/*
-
 # Cache and sync dependencies
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=geo_service/uv.lock,target=uv.lock \
@@ -39,11 +32,6 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # PRODUCTION stage
 ###########################################
 FROM python:3.13-slim-bookworm AS production
-
-RUN apt-get update && \
-    apt-get install -y ca-certificates \
-    libpq5 && \
-    rm -rf /var/lib/apt/lists/*
 
 # Copy the application from the builder
 COPY --from=builder --chown=app:app /app /app

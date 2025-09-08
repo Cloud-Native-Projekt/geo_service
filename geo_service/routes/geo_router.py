@@ -1,4 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+"""
+geo_router.py
+
+Defines API routes related to geographic protection queries.
+"""
+
+from fastapi import APIRouter, Depends
 
 from geo_service.dependencies import get_geo_service
 from geo_service.schemas.geo_schemas import GeoCond

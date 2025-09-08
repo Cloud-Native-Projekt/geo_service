@@ -1,3 +1,8 @@
+"""
+dependencies.py
+This file contains dependency definitions for the geo_service application.
+"""
+
 from fastapi import Depends
 
 from geo_service.repositories.implementations.geo_repo import GeoRepo

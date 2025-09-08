@@ -8,14 +8,15 @@ requires-python = ">=3.13"
 dependencies = [
 "fastapi>=0.116.1",
 "pydantic>=2.11.7",
-"requests>=2.32.4",
 "uvicorn>=0.35.0",
-"httpx>=0.24.0",
-"pytest>=7.4.0",
-"pytest-asyncio>=0.22.0",
-"OSMPythonTools>=0.3.3",
-"plpygis",
-"shapely",
-"geopandas",
-"pandas"
+"httpx>=0.28.1",
+"starlette>=0.47.3",
+"pytest>=8.4.1",
+"pytest-asyncio>=1.1.0",
+"OSMPythonTools>=0.3.6",
+"plpygis>=0.6.0",
+"shapely>=2.1.1",
+"geopandas>=1.1.1",
+"pandas>=2.3.2",
+"geopy>=2.4.1"
 ]
