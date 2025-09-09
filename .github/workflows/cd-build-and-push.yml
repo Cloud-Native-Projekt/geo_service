@@ -2,12 +2,6 @@ name: CD Pipeline - Build and Push
 
 on:
   workflow_dispatch:
-    inputs:
-      services:
-        description: 'Services to build (comma-separated, or "all" for all services)'
-        required: false
-        default: 'all'
-        type: string
 
 env:
   REGISTRY: ghcr.io
