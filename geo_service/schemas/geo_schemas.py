@@ -15,6 +15,7 @@ Classes:
 """
 
 from typing import Optional
+
 from pydantic import BaseModel
 
 
@@ -22,6 +23,11 @@ class GeoCond(BaseModel):
     lat: float
     lng: float
     radius: Optional[int] = 5000
+
+
+class ResultHealth(BaseModel):
+    status: str
+    message: Optional[str] = None
 
 
 class ResultPower(BaseModel):

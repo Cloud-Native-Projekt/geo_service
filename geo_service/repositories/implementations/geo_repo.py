@@ -13,6 +13,7 @@ from geo_service.repositories.interfaces.iface_geo_repo import GeoRepoInterface
 from geo_service.schemas.geo_schemas import (
     ResultBuildings,
     ResultForest,
+    ResultHealth,
     ResultPower,
     ResultProtection,
 )
@@ -65,20 +66,16 @@ class GeoRepo(GeoRepoInterface):
             distance_km = 5  # Limit to 5 km for Overpass API performance
         center_point = GeopyPoint(lat, lng)
 
-        north_point = geopy.distance.geodesic(kilometers=distance_km).\
-            destination(
+        north_point = geopy.distance.geodesic(kilometers=distance_km).destination(
             center_point, 0
         )
-        south_point = geopy.distance.geodesic(kilometers=distance_km).\
-            destination(
+        south_point = geopy.distance.geodesic(kilometers=distance_km).destination(
             center_point, 180
         )
-        east_point = geopy.distance.geodesic(kilometers=distance_km).\
-            destination(
+        east_point = geopy.distance.geodesic(kilometers=distance_km).destination(
             center_point, 90
         )
-        west_point = geopy.distance.geodesic(kilometers=distance_km).\
-            destination(
+        west_point = geopy.distance.geodesic(kilometers=distance_km).destination(
             center_point, 270
         )
 
@@ -99,7 +96,7 @@ class GeoRepo(GeoRepoInterface):
         additional_info: Optional[str] = None,
     ) -> Tuple[List[Any], List[str]]:
         """
-        Query Overpass API for geographic elements and extract their 
+        Query Overpass API for geographic elements and extract their
         geometries.
 
         Parameters:
@@ -108,7 +105,7 @@ class GeoRepo(GeoRepoInterface):
             radius (int): Search radius in meters.
             element_type (str or list): OSM element type(s) to query.
             selector (str or list): OSM selector(s) for filtering elements.
-            additional_info (str, optional): Type of additional info to 
+            additional_info (str, optional): Type of additional info to
             extract.
 
         Returns:
@@ -180,9 +177,16 @@ class GeoRepo(GeoRepoInterface):
                 corresponding_info = additional_info[min_distance_index]
         return min_distance, corresponding_info
 
-    async def get_power(
-        self, lat: float, lng: float, radius: int
-    ) -> ResultPower:
+    async def get_health(self) -> ResultHealth:
+        """
+        Check the health status of the GeoRepo service.
+
+        Returns:
+            ResultHealth: Result object indicating service health status.
+        """
+        return ResultHealth(status="healthy", message="Service is operational.")
+
+    async def get_power(self, lat: float, lng: float, radius: int) -> ResultPower:
         """
         Get the nearest power substation and powerline distances from a point.
 
@@ -197,7 +201,7 @@ class GeoRepo(GeoRepoInterface):
         substation_coords, _ = self._get_geometry_from_overpass(
             lat,
             lng,
-            radius,
+            10000,  # Fixed 10 km radius for power infrastructure
             element_type="node",
             selector=['"power"="substation"'],
             additional_info=None,
@@ -217,11 +221,6 @@ class GeoRepo(GeoRepoInterface):
         nearest_powerline_distance_m, _ = self._calculate_nearest_distance(
             lat, lng, powerline_coords, None
         )
-
-        if nearest_powerline_distance_m > radius:
-            nearest_powerline_distance_m = 0
-        if nearest_substation_distance_m > radius:
-            nearest_substation_distance_m = 0
 
         return ResultPower(
             nearest_substation_distance_m=nearest_substation_distance_m,
@@ -302,9 +301,7 @@ class GeoRepo(GeoRepoInterface):
                     return ResultBuildings(in_populated_area=True)
         return ResultBuildings(in_populated_area=False)
 
-    async def get_forest(
-        self, lat: float, lng: float, radius: int
-    ) -> ResultForest:
+    async def get_forest(self, lat: float, lng: float, radius: int) -> ResultForest:
         """
         Check if a point is within a forest and get its leaf type.
 
