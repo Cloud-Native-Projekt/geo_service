@@ -8,6 +8,7 @@ from geo_service.schemas.geo_schemas import (
     GeoCond,
     ResultBuildings,
     ResultForest,
+    ResultHealth,
     ResultPower,
     ResultProtection,
 )
@@ -37,6 +38,12 @@ class GeoService:
 
     def __init__(self, geo_repo: GeoRepoInterface):
         self.geo_repo = geo_repo
+
+    async def get_health(self) -> ResultHealth:
+        health: ResultHealth = await self.geo_repo.get_health()
+        if not health:
+            raise ValueError("Health data not found")
+        return health
 
     async def get_power(self, req: GeoCond) -> ResultPower:
         power: ResultPower = await self.geo_repo.get_power(

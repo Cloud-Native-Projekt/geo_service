@@ -23,6 +23,10 @@ class GeoRepoInterface(ABC):
     """
 
     @abstractmethod
+    async def get_health(self) -> schemas.ResultHealth:
+        pass
+
+    @abstractmethod
     async def get_power(
         self, lat: float, lng: float, radius: int
     ) -> schemas.ResultPower:

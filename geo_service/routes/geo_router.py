@@ -13,6 +13,13 @@ from geo_service.services.geo_service import GeoService
 router = APIRouter()
 
 
+@router.get("/geo/health", status_code=200)
+async def geo_health_endpoint(
+    geo_service: GeoService = Depends(get_geo_service),
+):
+    return await geo_service.get_health()
+
+
 @router.get("/geo/power", status_code=200)
 async def geo_power_endpoint(
     lat: float,
