@@ -288,7 +288,7 @@ class GeoRepo(GeoRepoInterface):
             landuse_coords, _ = self._get_geometry_from_overpass(
                 lat,
                 lng,
-                radius,
+                20000,  # Fixed 20 km radius for landuse
                 element_type=["way", "relation"],
                 selector=f'"landuse"="{landuse}"',
                 additional_info=None,
