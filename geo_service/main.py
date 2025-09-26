@@ -1,12 +1,19 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+
 from geo_service.routes import geo_router
-import asyncio
 
+LOGLEVEL = os.getenv("LOGLEVEL", "INFO")
 
+logging.basicConfig(
+    level=LOGLEVEL,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
 logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -20,6 +27,7 @@ async def lifespan(app: FastAPI):
     finally:
         logger.info("Running shutdown tasks...")
         logger.info("Shutdown tasks completed")
+
 
 app = FastAPI(lifespan=lifespan)
 
