@@ -1,7 +1,10 @@
+import asyncio
 import logging
 import os
 import ssl
 import time
+from concurrent.futures import ThreadPoolExecutor
+from functools import lru_cache
 from typing import Any, List, Optional, Tuple, Union
 
 import geopandas as gpd
@@ -49,7 +52,40 @@ class GeoRepo(GeoRepoInterface):
             format="%(asctime)s - %(levelname)s - %(message)s",
         )
         self.logger = logging.getLogger(self.__class__.__name__)
+
+        # Fix OSMPythonTools cache directory issues
+        try:
+            # In Docker container, use app-writable cache directories
+            home_cache = os.path.expanduser("~/.cache/OSMPythonTools")
+            app_cache = "/app/cache" if os.path.exists("/app") else "cache"
+
+            # Try home cache first, fallback to app cache
+            for cache_path in [home_cache, app_cache]:
+                try:
+                    os.makedirs(cache_path, exist_ok=True)
+                    # Test write permissions
+                    test_file = os.path.join(cache_path, "test_write")
+                    with open(test_file, "w") as f:
+                        f.write("test")
+                    os.remove(test_file)
+                    self.logger.info(f"Using cache directory: {cache_path}")
+                    break
+                except (PermissionError, OSError) as pe:
+                    self.logger.warning(f"Cache path {cache_path} not writable: {pe}")
+                    continue
+
+        except Exception as e:
+            self.logger.warning(f"Cache directory setup warning: {e}")
+
         self.overpass = Overpass()
+        self._executor = ThreadPoolExecutor(
+            max_workers=4, thread_name_prefix="geo_worker"
+        )
+
+    def __del__(self) -> None:
+        """Clean up thread pool on destruction."""
+        if hasattr(self, "_executor"):
+            self._executor.shutdown(wait=False)
 
     def _create_bounding_box(
         self, lat: float, lng: float, distance: float
@@ -66,7 +102,7 @@ class GeoRepo(GeoRepoInterface):
             tuple: (min_lat, min_lon, max_lat, max_lon)
         """
         distance_km = distance / 1000.0  # Convert meters to kilometers
-        if distance_km > 0:
+        if distance_km > 5:
             distance_km = 5  # Limit to 5 km for Overpass API performance
         center_point = GeopyPoint(lat, lng)
 
@@ -90,7 +126,48 @@ class GeoRepo(GeoRepoInterface):
 
         return min_lat, min_lon, max_lat, max_lon
 
-    def _get_data_from_overpass(
+    def _make_hashable_params(
+        self, element_type: Union[str, List[str]], selector: Union[str, List[str]]
+    ) -> Tuple[Union[str, Tuple[str, ...]], Union[str, Tuple[str, ...]]]:
+        """Convert lists to tuples for hashability in caching."""
+        hashable_element_type = (
+            tuple(element_type) if isinstance(element_type, list) else element_type
+        )
+        hashable_selector = tuple(selector) if isinstance(selector, list) else selector
+        return hashable_element_type, hashable_selector
+
+    # LRU cache for faster in-memory access to frequently used results
+    @lru_cache(maxsize=128)
+    def _get_data_from_overpass_cached(
+        self,
+        lat: float,
+        lng: float,
+        radius: int,
+        element_type: Union[str, Tuple[str, ...]],
+        selector: Union[str, Tuple[str, ...]],
+        additional_info: Optional[str] = None,
+        include_geometry: bool = True,
+        el_limit: bool = False,
+    ) -> Tuple[List[Any], str]:
+        """Cached version with hashable parameters."""
+        # Convert back to lists for processing
+        element_type_list = (
+            list(element_type) if isinstance(element_type, tuple) else element_type
+        )
+        selector_list = list(selector) if isinstance(selector, tuple) else selector
+
+        return self._get_data_from_overpass_sync(
+            lat,
+            lng,
+            radius,
+            element_type_list,
+            selector_list,
+            additional_info,
+            include_geometry,
+            el_limit,
+        )
+
+    def _get_data_from_overpass_sync(
         self,
         lat: float,
         lng: float,
@@ -102,6 +179,7 @@ class GeoRepo(GeoRepoInterface):
         el_limit: bool = False,
     ) -> Tuple[List[Any], str]:
         """
+        Synchronous version of Overpass query for use in thread pools.
         Query Overpass API for geographic elements and extract their
         geometries and/or additional info.
 
@@ -114,7 +192,8 @@ class GeoRepo(GeoRepoInterface):
             additional_info (str, optional): Type of additional info to extract
                 (e.g., "protected_area" or "forests").
             include_geometry (bool): Whether to include geometry in the query.
-            el_limit (bool): Whether to limit the number of elements returned for performance.
+            el_limit (bool): Whether to limit the number of elements returned
+                for performance.
 
         Returns:
             tuple: (
@@ -135,18 +214,31 @@ class GeoRepo(GeoRepoInterface):
             includeGeometry=include_geometry,
             out=out_str,
         )
-        attempt = 0
+
+        # Retry logic with blocking sleep (safe in thread)
         for attempt in range(2):
             try:
                 result = self.overpass.query(query)
                 break
             except Exception as e:
+                error_str = str(e).lower()
                 self.logger.error(f"Overpass query attempt {attempt + 1} failed: {e}")
-                if attempt == 0 and "504" in str(e):
+
+                # Handle cache directory issues
+                if "file exists" in error_str and "cache" in error_str:
+                    try:
+                        # Try to fix cache directory issue
+                        if os.path.exists("cache") and not os.path.isdir("cache"):
+                            os.remove("cache")
+                        os.makedirs("cache", exist_ok=True)
+                    except Exception as cache_e:
+                        self.logger.warning(f"Cache fix attempt failed: {cache_e}")
+
+                if attempt == 0 and ("504" in error_str or "file exists" in error_str):
                     self.logger.info(
-                        "Retrying Overpass query after 2 seconds due to 504 error."
+                        "Retrying Overpass query after 2 seconds due to error."
                     )
-                    time.sleep(2)
+                    time.sleep(2)  # Safe blocking sleep in thread
                 else:
                     return [False], ""
 
@@ -172,26 +264,57 @@ class GeoRepo(GeoRepoInterface):
             coords.append(False)
         return coords, info
 
-    def _calculate_nearest_distance(
+    async def _get_data_from_overpass(
+        self,
+        lat: float,
+        lng: float,
+        radius: int,
+        element_type: Union[str, List[str]],
+        selector: Union[str, List[str]],
+        additional_info: Optional[str] = None,
+        include_geometry: bool = True,
+        el_limit: bool = False,
+    ) -> Tuple[List[Any], str]:
+        """
+        Async wrapper that runs the cached Overpass query in a thread pool.
+        """
+        # Make parameters hashable for caching
+        hashable_element_type, hashable_selector = self._make_hashable_params(
+            element_type, selector
+        )
+
+        return await asyncio.to_thread(
+            self._get_data_from_overpass_cached,
+            lat,
+            lng,
+            radius,
+            hashable_element_type,
+            hashable_selector,
+            additional_info,
+            include_geometry,
+            el_limit,
+        )
+
+    def _calculate_nearest_distance_sync(
         self,
         lat: float,
         lng: float,
         geometry_coords: List[Any],
-        additional_info: Optional[List[str]] = None,
     ) -> float:
         """
+        Synchronous version of distance calculation for use in thread pools.
         Calculate the nearest distance from a point to a list of geometries.
 
         Parameters:
             lat (float): Latitude of the reference point.
             lng (float): Longitude of the reference point.
             geometry_coords (list): List of geometry objects.
-            additional_info (list, optional): List of additional info strings.
 
         Returns:
             float: Minimum distance in meters.
         """
         min_distance: float = 0.0
+
         poi_gdf = (
             gpd.GeoDataFrame({"geometry": [Point(lng, lat)]})
             .set_crs("EPSG:4326")
@@ -216,6 +339,22 @@ class GeoRepo(GeoRepoInterface):
             self.logger.info("No geometries found for distance calculation.")
         return min_distance
 
+    async def _calculate_nearest_distance(
+        self,
+        lat: float,
+        lng: float,
+        geometry_coords: List[Any],
+    ) -> float:
+        """
+        Async wrapper that runs the sync distance calculation in a thread pool.
+        """
+        return await asyncio.to_thread(
+            self._calculate_nearest_distance_sync,
+            lat,
+            lng,
+            geometry_coords,
+        )
+
     async def get_health(self) -> ResultHealth:
         """
         Check the health status of the GeoRepo service.
@@ -227,54 +366,90 @@ class GeoRepo(GeoRepoInterface):
 
     async def get_power(self, lat: float, lng: float, radius: int) -> ResultPower:
         """
-        Get the nearest power substation (using a fixed 10 km radius) and powerline distances from a point.
+        Get the nearest power substation (using a fixed 10 km radius) and
+        powerline distances from a point.
 
         Parameters:
             lat (float): Latitude of the center point.
             lng (float): Longitude of the center point.
-            radius (int): Search radius in meters (powerlines, substations use fixed 10 km radius).
+            radius (int): Search radius in meters (powerlines, substations use
+                         fixed 10 km radius).
 
         Returns:
             ResultPower: Result object with nearest distances.
         """
-        substation_coords, _ = self._get_data_from_overpass(
+        # Concurrent queries for substations and power lines
+        substation_task = self._get_data_from_overpass(
             lat,
             lng,
-            10000,  # Fixed 10 km radius for power infrastructure
+            10000,
             element_type="node",
-            selector=['"power"="substation"'],
+            selector='"power"="substation"',
             additional_info=None,
             include_geometry=True,
             el_limit=False,
         )
-        if substation_coords[0]:
-            nearest_substation_distance_m = self._calculate_nearest_distance(
-                lat, lng, substation_coords, None
-            )
-        else:
-            nearest_substation_distance_m = 0.0
 
-        if nearest_substation_distance_m == 0.0:
-            self.logger.info("No substations found.")
-
-        powerline_coords, _ = self._get_data_from_overpass(
+        powerline_task = self._get_data_from_overpass(
             lat,
             lng,
             radius,
             element_type="way",
-            selector=['"line"="busbar"', '"power"="line"'],
+            selector=['"power"="line"', '"line"="busbar"'],
             additional_info=None,
             include_geometry=True,
             el_limit=False,
         )
-        if powerline_coords[0]:
-            nearest_powerline_distance_m = self._calculate_nearest_distance(
-                lat, lng, powerline_coords, None
+
+        substation_result: Any
+        powerline_result: Any
+        substation_result, powerline_result = await asyncio.gather(
+            substation_task, powerline_task, return_exceptions=True
+        )
+
+        # Extract coords from results
+        substation_coords = (
+            substation_result[0]
+            if isinstance(substation_result, tuple) and len(substation_result) > 0
+            else substation_result
+        )
+        powerline_coords = (
+            powerline_result[0]
+            if isinstance(powerline_result, tuple) and len(powerline_result) > 0
+            else powerline_result
+        )
+
+        # Calculate distances concurrently
+        if substation_coords and substation_coords is not False:
+            substation_distance_task = self._calculate_nearest_distance(
+                lat, lng, substation_coords
             )
         else:
-            nearest_powerline_distance_m = 0.0
+
+            async def zero_distance():
+                return 0.0
+
+            substation_distance_task = zero_distance()
+
+        if powerline_coords and powerline_coords is not False:
+            powerline_distance_task = self._calculate_nearest_distance(
+                lat, lng, powerline_coords
+            )
+        else:
+
+            async def zero_distance():
+                return 0.0
+
+            powerline_distance_task = zero_distance()
+
+        nearest_substation_distance_m, nearest_powerline_distance_m = (
+            await asyncio.gather(substation_distance_task, powerline_distance_task)
+        )
+
+        if nearest_substation_distance_m == 0.0:
+            self.logger.info("No substations found or distance calculation failed.")
         if nearest_powerline_distance_m == 0.0:
-            self.logger.info("No powerlines found.")
+            self.logger.info("No powerlines found or distance calculation failed.")
 
         return ResultPower(
             nearest_substation_distance_m=nearest_substation_distance_m,
@@ -295,7 +470,7 @@ class GeoRepo(GeoRepoInterface):
         Returns:
             ResultProtection: Result object with protected area info.
         """
-        area_coords, designation = self._get_data_from_overpass(
+        area_coords, designation = await self._get_data_from_overpass(
             lat,
             lng,
             radius,
@@ -305,7 +480,7 @@ class GeoRepo(GeoRepoInterface):
             include_geometry=False,
             el_limit=True,
         )
-        if area_coords[0]:
+        if area_coords and area_coords[0] is not False:
             return ResultProtection(
                 in_protected_area=True,
                 designation=designation,
@@ -331,7 +506,7 @@ class GeoRepo(GeoRepoInterface):
         Returns:
             ResultBuildings: Result object indicating populated area status.
         """
-        landuse_coords, _ = self._get_data_from_overpass(
+        landuse_coords, _ = await self._get_data_from_overpass(
             lat,
             lng,
             radius,
@@ -347,7 +522,7 @@ class GeoRepo(GeoRepoInterface):
             include_geometry=False,
             el_limit=True,
         )
-        if landuse_coords[0]:
+        if landuse_coords and landuse_coords[0] is not False:
             return ResultBuildings(in_populated_area=True)
         else:
             self.logger.info("No buildings found within radius.")
@@ -366,7 +541,7 @@ class GeoRepo(GeoRepoInterface):
             ResultForest: Result object with forest leaf type (mixed,
             broadleaf etc.) info.
         """
-        forest_coords, leaf_type = self._get_data_from_overpass(
+        forest_coords, leaf_type = await self._get_data_from_overpass(
             lat,
             lng,
             radius,
@@ -376,7 +551,7 @@ class GeoRepo(GeoRepoInterface):
             include_geometry=False,
             el_limit=True,
         )
-        if forest_coords[0] != 0:
+        if forest_coords and forest_coords[0] is not False:
             return ResultForest(
                 in_forest=True,
                 type=leaf_type,
