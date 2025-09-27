@@ -33,12 +33,26 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 ###########################################
 FROM python:3.13-slim-bookworm AS production
 
+# Create app user and group
+RUN groupadd --gid 1000 app && \
+    useradd --uid 1000 --gid app --shell /bin/bash --create-home app
+
 # Copy the application from the builder
 COPY --from=builder --chown=app:app /app /app
+
+# Create cache directories for OSMPythonTools with proper permissions
+RUN mkdir -p /app/cache /home/app/.cache/OSMPythonTools && \
+    chown -R app:app /app/cache /home/app/.cache
+
+# Switch to app user
+USER app
 
 # Production-specific env
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH="/app"
+
+# Set working directory
+WORKDIR /app
 
 # Set the command to run your application
 CMD ["uvicorn", "geo_service.main:app", "--host", "0.0.0.0", "--port", "8000"]
