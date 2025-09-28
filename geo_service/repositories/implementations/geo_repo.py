@@ -57,6 +57,12 @@ class GeoRepo(GeoRepoInterface):
         max_par = int(settings.overpass_max_par)
         self._overpass_semaphore = asyncio.Semaphore(max_par)
 
+        # Ensure OSMPythonTools cache directory exists (avoid race / File exists errors)
+        try:
+            os.makedirs("cache", exist_ok=True)
+        except Exception as e:
+            self.logger.warning(f"Could not ensure cache directory existence: {e}")
+
     def _create_bounding_box(
         self, lat: float, lng: float, distance: float
     ) -> Tuple[float, float, float, float]:
@@ -265,15 +271,18 @@ class GeoRepo(GeoRepoInterface):
         """
         min_distance: float = 0.0
 
-        poi_gdf = (
-            gpd.GeoDataFrame({"geometry": [Point(lng, lat)]})
-            .set_crs("EPSG:4326")
-            .to_crs("EPSG:3857")
-        )
-        geom_gdf = (
-            gpd.GeoDataFrame({"geometry": geometry_coords})
-            .set_crs("EPSG:4326")
-            .to_crs("EPSG:3857")
+        if not geometry_coords or all(g is False for g in geometry_coords):
+            return 0.0
+
+        cleaned = [g for g in geometry_coords if getattr(g, "wkb", None) is not None]
+        if not cleaned:
+            return 0.0
+
+        poi_gdf = gpd.GeoDataFrame(
+            {"geometry": [Point(lng, lat)]}, crs="EPSG:4326"
+        ).to_crs("EPSG:3857")
+        geom_gdf = gpd.GeoDataFrame({"geometry": cleaned}, crs="EPSG:4326").to_crs(
+            "EPSG:3857"
         )
         distances = gpd.sjoin_nearest(
             poi_gdf,
