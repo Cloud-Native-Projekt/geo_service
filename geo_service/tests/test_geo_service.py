@@ -1,4 +1,14 @@
 params_protected_area = {"lng": 9.8482, "lat": 52.9340, "radius": 10000}
+"""
+# Tests for geo_service API endpoints
+This module contains tests for the geo_service API, verifying the following endpoints:
+- /geo/health: Service health check.
+- /geo/power: Power infrastructure proximity.
+- /geo/forest: Forest presence and type.
+- /geo/protection: Protected area status and designation.
+- /geo/builtup: Populated/building area presence.
+Each test checks for correct status codes and expected response data for various geographic locations.
+"""
 
 # Forest in bavaria
 params_in_forest = {"lng": 11.466577, "lat": 48.232089, "radius": 5000}

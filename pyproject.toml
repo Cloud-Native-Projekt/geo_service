@@ -8,6 +8,7 @@ requires-python = ">=3.13"
 dependencies = [
 "fastapi>=0.116.1",
 "pydantic>=2.11.7",
+"pydantic-settings>=2.5.2",
 "uvicorn>=0.35.0",
 "httpx>=0.28.1",
 "starlette>=0.47.3",

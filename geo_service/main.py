@@ -1,8 +1,9 @@
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 
 from geo_service.routes import geo_router
 
@@ -32,3 +33,13 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 app.include_router(geo_router.router)
+
+
+@app.middleware("http")
+async def add_timing_header(request: Request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    duration = (time.perf_counter() - start) * 1000
+    response.headers["X-Process-Time-ms"] = f"{duration:.2f}"
+    logger.info(f"{request.method} {request.url.path} took {duration:.2f} ms")
+    return response

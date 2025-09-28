@@ -22,7 +22,7 @@ from pydantic import BaseModel
 class GeoCond(BaseModel):
     lat: float
     lng: float
-    radius: Optional[int] = 5000
+    radius: int = 5000
 
 
 class ResultHealth(BaseModel):
@@ -37,13 +37,13 @@ class ResultPower(BaseModel):
 
 class ResultProtection(BaseModel):
     in_protected_area: bool
-    designation: Optional[str]
+    designation: Optional[str] = None
 
 
 class ResultForest(BaseModel):
-    type: Optional[str]
+    type: Optional[str] = None
     in_forest: bool
 
 
 class ResultBuildings(BaseModel):
-    in_populated_area: bool = None
+    in_populated_area: bool
