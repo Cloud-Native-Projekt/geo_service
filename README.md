@@ -37,7 +37,7 @@ geo_service/
   repositories/      # Overpass / OSM access + geometry logic
     implementations/ # Concrete repository (queries, distance calculations)
     interfaces/      # Interfaces for testability & future adapters
-  tests/             # Pytest suite (functional + performance)
+  tests/             # Pytest suite
 ```
 
 ### Layering
@@ -59,11 +59,9 @@ Multi-layer:
 
 ## Tests
 
-| File                         | Focus                                                                  |
-| ---------------------------- | ---------------------------------------------------------------------- |
-| `test_geo_service.py`        | Functional end-to-end tests of all geo endpoints (various coordinates) |
-| `test_parallel_endpoints.py` | Parallel batch (1 request per endpoint) < 10s total time               |
-| `test_performance_cache.py`  | Cold vs. warm timing comparison (Berlin & Cologne), speedup assertion  |
+| File                  | Focus                                                                  |
+| --------------------- | ---------------------------------------------------------------------- |
+| `test_geo_service.py` | Functional end-to-end tests of all geo endpoints (various coordinates) |
 
 Fixtures / Utilities:
 
@@ -73,12 +71,6 @@ Run all tests (in container):
 
 ```bash
 docker compose exec geo_service pytest -q
-```
-
-Run single test:
-
-```bash
-docker compose exec geo_service pytest /app/geo_service/tests/test_parallel_endpoints.py::test_parallel_endpoints_under_sla -q
 ```
 
 ## Run in Docker
