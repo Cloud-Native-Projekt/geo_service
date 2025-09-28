@@ -48,11 +48,11 @@ RUN mkdir -p /app/cache /home/app/.cache/OSMPythonTools && \
 USER app
 
 # Production-specific env
-ENV PATH="/app/.venv/bin:$PATH"
-ENV PYTHONPATH="/app"
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONPATH="/app" \
+    PYTHONUNBUFFERED=1
 
 # Set working directory
 WORKDIR /app
 
-# Set the command to run your application
 CMD ["uvicorn", "geo_service.main:app", "--host", "0.0.0.0", "--port", "8000"]

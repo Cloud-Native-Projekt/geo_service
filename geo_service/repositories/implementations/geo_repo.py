@@ -2,8 +2,6 @@ import asyncio
 import logging
 import os
 import ssl
-import time
-from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from typing import Any, List, Optional, Tuple, Union
 
@@ -14,6 +12,7 @@ from OSMPythonTools.overpass import Overpass, overpassQueryBuilder
 from plpygis import Geometry
 from shapely.geometry import Point
 
+from geo_service.config import settings
 from geo_service.repositories.interfaces.iface_geo_repo import GeoRepoInterface
 from geo_service.schemas.geo_schemas import (
     ResultBuildings,
@@ -53,39 +52,10 @@ class GeoRepo(GeoRepoInterface):
         )
         self.logger = logging.getLogger(self.__class__.__name__)
 
-        # Fix OSMPythonTools cache directory issues
-        try:
-            # In Docker container, use app-writable cache directories
-            home_cache = os.path.expanduser("~/.cache/OSMPythonTools")
-            app_cache = "/app/cache" if os.path.exists("/app") else "cache"
-
-            # Try home cache first, fallback to app cache
-            for cache_path in [home_cache, app_cache]:
-                try:
-                    os.makedirs(cache_path, exist_ok=True)
-                    # Test write permissions
-                    test_file = os.path.join(cache_path, "test_write")
-                    with open(test_file, "w") as f:
-                        f.write("test")
-                    os.remove(test_file)
-                    self.logger.info(f"Using cache directory: {cache_path}")
-                    break
-                except (PermissionError, OSError) as pe:
-                    self.logger.warning(f"Cache path {cache_path} not writable: {pe}")
-                    continue
-
-        except Exception as e:
-            self.logger.warning(f"Cache directory setup warning: {e}")
-
         self.overpass = Overpass()
-        self._executor = ThreadPoolExecutor(
-            max_workers=4, thread_name_prefix="geo_worker"
-        )
-
-    def __del__(self) -> None:
-        """Clean up thread pool on destruction."""
-        if hasattr(self, "_executor"):
-            self._executor.shutdown(wait=False)
+        # Limit concurrent Overpass queries
+        max_par = int(settings.overpass_max_par)
+        self._overpass_semaphore = asyncio.Semaphore(max_par)
 
     def _create_bounding_box(
         self, lat: float, lng: float, distance: float
@@ -216,31 +186,11 @@ class GeoRepo(GeoRepoInterface):
         )
 
         # Retry logic with blocking sleep (safe in thread)
-        for attempt in range(2):
-            try:
-                result = self.overpass.query(query)
-                break
-            except Exception as e:
-                error_str = str(e).lower()
-                self.logger.error(f"Overpass query attempt {attempt + 1} failed: {e}")
-
-                # Handle cache directory issues
-                if "file exists" in error_str and "cache" in error_str:
-                    try:
-                        # Try to fix cache directory issue
-                        if os.path.exists("cache") and not os.path.isdir("cache"):
-                            os.remove("cache")
-                        os.makedirs("cache", exist_ok=True)
-                    except Exception as cache_e:
-                        self.logger.warning(f"Cache fix attempt failed: {cache_e}")
-
-                if attempt == 0 and ("504" in error_str or "file exists" in error_str):
-                    self.logger.info(
-                        "Retrying Overpass query after 2 seconds due to error."
-                    )
-                    time.sleep(2)  # Safe blocking sleep in thread
-                else:
-                    return [False], ""
+        try:
+            result = self.overpass.query(query)
+        except Exception as e:
+            self.logger.error(f"Overpass query attempt failed: {e}")
+            return [False], ""
 
         info: str = ""
         coords: List[Any] = []
@@ -282,18 +232,18 @@ class GeoRepo(GeoRepoInterface):
         hashable_element_type, hashable_selector = self._make_hashable_params(
             element_type, selector
         )
-
-        return await asyncio.to_thread(
-            self._get_data_from_overpass_cached,
-            lat,
-            lng,
-            radius,
-            hashable_element_type,
-            hashable_selector,
-            additional_info,
-            include_geometry,
-            el_limit,
-        )
+        async with self._overpass_semaphore:
+            return await asyncio.to_thread(
+                self._get_data_from_overpass_cached,
+                lat,
+                lng,
+                radius,
+                hashable_element_type,
+                hashable_selector,
+                additional_info,
+                include_geometry,
+                el_limit,
+            )
 
     def _calculate_nearest_distance_sync(
         self,
@@ -420,30 +370,20 @@ class GeoRepo(GeoRepoInterface):
         )
 
         # Calculate distances concurrently
+        tasks = []
+
         if substation_coords and substation_coords is not False:
-            substation_distance_task = self._calculate_nearest_distance(
-                lat, lng, substation_coords
-            )
+            tasks.append(self._calculate_nearest_distance(lat, lng, substation_coords))
         else:
-
-            async def zero_distance():
-                return 0.0
-
-            substation_distance_task = zero_distance()
+            tasks.append(asyncio.create_task(asyncio.sleep(0, result=0.0)))
 
         if powerline_coords and powerline_coords is not False:
-            powerline_distance_task = self._calculate_nearest_distance(
-                lat, lng, powerline_coords
-            )
+            tasks.append(self._calculate_nearest_distance(lat, lng, powerline_coords))
         else:
-
-            async def zero_distance():
-                return 0.0
-
-            powerline_distance_task = zero_distance()
+            tasks.append(asyncio.create_task(asyncio.sleep(0, result=0.0)))
 
         nearest_substation_distance_m, nearest_powerline_distance_m = (
-            await asyncio.gather(substation_distance_task, powerline_distance_task)
+            await asyncio.gather(*tasks)
         )
 
         if nearest_substation_distance_m == 0.0:
